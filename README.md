@@ -22,3 +22,7 @@ A Minecraft plugin that allows players to view and set waypoint to BlueMap marke
 #### Permissions
 
 - `bluemapcompass.use` - Allows players to use the compass GUI (default: true)
+![image](https://github.com/user-attachments/assets/f441b45a-b614-4c72-8df0-97321f5c0939)
+![image](https://github.com/user-attachments/assets/7cf55f70-4ef6-4fc8-a575-47712833889d)
+![image](https://github.com/user-attachments/assets/a8fd7179-f8d4-427a-95bd-e53f5bcb0d38)
+![image](https://github.com/user-attachments/assets/5d52debd-0758-4254-8518-5ffc1073bc2d)
