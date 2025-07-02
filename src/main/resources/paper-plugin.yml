@@ -1,0 +1,6 @@
+name: BlueMap Compass
+version: '1.0'
+main: fun.mntale.blueMapCompass.BlueMapCompass
+api-version: '1.21'
+authors: [ MidnightTale_ ]
+website: https://mntale.fun
