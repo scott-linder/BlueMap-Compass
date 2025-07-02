@@ -76,6 +76,15 @@ public class BannerMarkerListener implements Listener {
                 });
             });
         });
+        // Untrack for all online players and remove displays
+        for (org.bukkit.entity.Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
+            java.util.Set<String> tracked = fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player);
+            if (tracked.contains(markerId)) {
+                tracked.remove(markerId);
+                fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, tracked);
+                fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
+            }
+        }
     }
 
     // Call this on plugin enable to restore all markers

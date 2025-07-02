@@ -62,13 +62,25 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        for (String markerId : WaypointManager.getTrackedMarkers(player)) {
-            MarkerData marker = BlueMapIntegration.getMarkers().stream()
+        java.util.Set<String> tracked = fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player);
+        java.util.List<MarkerData> allMarkers = fun.mntale.blueMapCompass.BlueMapIntegration.getMarkers();
+        java.util.Set<String> validMarkerIds = new java.util.HashSet<>();
+        for (MarkerData marker : allMarkers) validMarkerIds.add(marker.id());
+        for (String markerId : new java.util.HashSet<>(tracked)) {
+            if (!validMarkerIds.contains(markerId)) {
+                tracked.remove(markerId);
+                fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, tracked);
+                fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
+            }
+        }
+        // Restore tracked waypoints for valid markers
+        for (String markerId : tracked) {
+            MarkerData marker = allMarkers.stream()
                 .filter(m -> m.id().equals(markerId))
                 .findFirst()
                 .orElse(null);
             if (marker != null) {
-                WaypointManager.setWaypoint(player, marker, this);
+                fun.mntale.blueMapCompass.WaypointManager.setWaypoint(player, marker, this);
             }
         }
     }
