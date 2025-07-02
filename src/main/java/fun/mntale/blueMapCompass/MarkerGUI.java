@@ -35,6 +35,26 @@ public class MarkerGUI implements Listener {
     private static final Material CATEGORY_ICON = Material.BOOK;
     private static final NamespacedKey MARKER_ID_KEY = new NamespacedKey("bluemapcompass", "marker_id");
 
+    // Map banner color names to closest MiniMessage hex color codes
+    private static final Map<String, String> BANNER_TO_HEX = Map.ofEntries(
+        Map.entry("white", "#F9FFFE"),
+        Map.entry("orange", "#F9801D"),
+        Map.entry("magenta", "#C74EBD"),
+        Map.entry("light_blue", "#3AB3DA"),
+        Map.entry("yellow", "#FED83D"),
+        Map.entry("lime", "#80C71F"),
+        Map.entry("pink", "#F38BAA"),
+        Map.entry("gray", "#474F52"),
+        Map.entry("light_gray", "#9D9D97"),
+        Map.entry("cyan", "#169C9C"),
+        Map.entry("purple", "#8932B8"),
+        Map.entry("blue", "#3C44AA"),
+        Map.entry("brown", "#835432"),
+        Map.entry("green", "#5E7C16"),
+        Map.entry("red", "#B02E26"),
+        Map.entry("black", "#1D1D21")
+    );
+
     /**
      * State for each player's open GUI.
      * @param groupIndex current group index
@@ -134,8 +154,9 @@ public class MarkerGUI implements Listener {
         Component displayName;
         if (marker.groupId().equalsIgnoreCase("banner-markers")) {
             String[] parts = marker.id().split("-");
-            String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
-            String colorTag = colorName.length() > 0 ? "<" + colorName.toLowerCase() + ">" : "";
+            String colorName = parts.length > 0 ? parts[parts.length - 1].toLowerCase() : "";
+            String hex = BANNER_TO_HEX.getOrDefault(colorName, "#FFFFFF");
+            String colorTag = colorName.length() > 0 ? "<color:" + hex + ">" : "";
             displayName = MM.deserialize(colorTag + "<b>" + marker.name() + "</b>");
         } else {
             displayName = MM.deserialize("<gradient:#00c3ff:#ffff1c><b>" + marker.name() + "</b></gradient>");
