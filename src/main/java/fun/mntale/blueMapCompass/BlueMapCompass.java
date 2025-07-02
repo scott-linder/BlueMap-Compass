@@ -14,6 +14,9 @@ import org.bukkit.persistence.PersistentDataType;
 
 import com.tcoded.folialib.FoliaLib;
 
+import java.util.Set;
+import java.util.List;
+
 public final class BlueMapCompass extends JavaPlugin implements Listener {
 
     public static BlueMapCompass instance;
@@ -62,19 +65,23 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        java.util.Set<String> tracked = fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player);
-        java.util.List<MarkerData> allMarkers = fun.mntale.blueMapCompass.BlueMapIntegration.getMarkers();
-        java.util.Set<String> validMarkerIds = new java.util.HashSet<>();
+        Set<String> tracked = fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player);
+        List<MarkerData> allMarkers = fun.mntale.blueMapCompass.BlueMapIntegration.getMarkers();
+        Set<String> validMarkerIds = new java.util.HashSet<>();
         for (MarkerData marker : allMarkers) validMarkerIds.add(marker.id());
-        for (String markerId : new java.util.HashSet<>(tracked)) {
-            if (!validMarkerIds.contains(markerId)) {
-                tracked.remove(markerId);
-                fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, tracked);
+
+        Set<String> newTracked = new java.util.HashSet<>();
+        for (String markerId : tracked) {
+            if (validMarkerIds.contains(markerId)) {
+                newTracked.add(markerId);
+            } else {
                 fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
             }
         }
+        fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, newTracked);
+
         // Restore tracked waypoints for valid markers
-        for (String markerId : tracked) {
+        for (String markerId : newTracked) {
             MarkerData marker = allMarkers.stream()
                 .filter(m -> m.id().equals(markerId))
                 .findFirst()

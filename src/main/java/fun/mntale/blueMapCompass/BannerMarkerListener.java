@@ -17,6 +17,14 @@ import com.flowpowered.math.vector.Vector3d;
 import java.util.Optional;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
+import org.bukkit.event.block.BlockBurnEvent;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockPhysicsEvent;
 
 public class BannerMarkerListener implements Listener {
 
@@ -54,9 +62,8 @@ public class BannerMarkerListener implements Listener {
         });
     }
 
-    @EventHandler
-    public void onBannerBreak(BlockBreakEvent event) {
-        Block block = event.getBlock();
+    // Utility to handle banner removal logic
+    private void handleBannerRemove(Block block) {
         if (!(block.getState() instanceof Banner banner)) return;
         Location loc = block.getLocation();
         String worldName = loc.getWorld().getName();
@@ -84,6 +91,59 @@ public class BannerMarkerListener implements Listener {
                 fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, tracked);
                 fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
             }
+        }
+    }
+
+    @EventHandler
+    public void onBannerBreak(BlockBreakEvent event) {
+        handleBannerRemove(event.getBlock());
+    }
+
+    @EventHandler
+    public void onBlockExplode(BlockExplodeEvent event) {
+        for (Block block : event.blockList()) {
+            handleBannerRemove(block);
+        }
+    }
+
+    @EventHandler
+    public void onEntityExplode(EntityExplodeEvent event) {
+        for (Block block : event.blockList()) {
+            handleBannerRemove(block);
+        }
+    }
+
+    @EventHandler
+    public void onBlockBurn(BlockBurnEvent event) {
+        handleBannerRemove(event.getBlock());
+    }
+
+    @EventHandler
+    public void onBlockFromTo(BlockFromToEvent event) {
+        handleBannerRemove(event.getToBlock());
+    }
+
+    @EventHandler
+    public void onBlockFade(BlockFadeEvent event) {
+        handleBannerRemove(event.getBlock());
+    }
+
+    @EventHandler
+    public void onBlockPhysics(BlockPhysicsEvent event) {
+        handleBannerRemove(event.getBlock());
+    }
+
+    @EventHandler
+    public void onBlockPistonExtend(BlockPistonExtendEvent event) {
+        for (Block block : event.getBlocks()) {
+            handleBannerRemove(block);
+        }
+    }
+
+    @EventHandler
+    public void onBlockPistonRetract(BlockPistonRetractEvent event) {
+        for (Block block : event.getBlocks()) {
+            handleBannerRemove(block);
         }
     }
 
