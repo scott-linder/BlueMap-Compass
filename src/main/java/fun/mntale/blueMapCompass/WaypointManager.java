@@ -266,8 +266,8 @@ public class WaypointManager {
         Map<String, BlockDisplay> playerDisplays = waypoints.get(player.getUniqueId());
         if (playerDisplays != null) {
             BlockDisplay display = playerDisplays.remove(markerId);
-            if (display != null && !display.isDead()) {
-                BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, removeTask -> display.remove());
+        if (display != null && !display.isDead()) {
+            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, removeTask -> display.remove());
                 if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
                     Bukkit.getLogger().warning("[BlueMapCompass] BlockDisplay removed for player: " + player.getName());
                 }

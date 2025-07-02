@@ -33,7 +33,15 @@ public class BannerMarkerListener implements Listener {
         Block block = event.getBlockPlaced();
         if (!(block.getState() instanceof Banner banner)) return;
         ItemStack item = event.getItemInHand();
-        if (!(item.hasItemMeta() && item.getItemMeta().hasDisplayName())) return; // Ignore banners with no custom name
+        if (!(item.hasItemMeta() && item.getItemMeta().hasDisplayName())) {
+            if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
+                org.bukkit.Bukkit.getLogger().info("[BlueMapCompass][DEBUG] Banner placed with NO custom name at " + block.getLocation());
+            }
+            return; // Ignore banners with no custom name
+        }
+        if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
+            org.bukkit.Bukkit.getLogger().info("[BlueMapCompass][DEBUG] Banner placed with custom name at " + block.getLocation());
+        }
         Component nameComponent = item.getItemMeta().displayName();
         String name = PlainTextComponentSerializer.plainText().serialize(nameComponent);
         DyeColor color = banner.getBaseColor();
@@ -57,18 +65,24 @@ public class BannerMarkerListener implements Listener {
                             .maxDistance(100000)
                             .build();
                     markerSet.getMarkers().put(markerId, marker);
+                    if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
+                        org.bukkit.Bukkit.getLogger().info("[BlueMapCompass][DEBUG] Banner marker added: " + markerId);
+                    }
                 });
             });
         });
     }
 
     // Utility to handle banner removal logic
-    private void handleBannerRemove(Block block) {
+    private void handleBannerRemove(Block block, String eventType) {
         if (!(block.getState() instanceof Banner banner)) return;
         Location loc = block.getLocation();
         String worldName = loc.getWorld().getName();
         DyeColor color = banner.getBaseColor();
         String markerId = "banner-" + worldName + "-" + loc.getBlockX() + "-" + loc.getBlockY() + "-" + loc.getBlockZ() + "-" + color;
+        if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
+            org.bukkit.Bukkit.getLogger().info("[BlueMapCompass][DEBUG] Banner marker removed by " + eventType + " at " + loc + " markerId=" + markerId);
+        }
         // Remove from storage
         BlueMapCompass.instance.bannerMarkerStorage.removeMarker(markerId);
         // Remove marker from BlueMap
@@ -96,54 +110,49 @@ public class BannerMarkerListener implements Listener {
 
     @EventHandler
     public void onBannerBreak(BlockBreakEvent event) {
-        handleBannerRemove(event.getBlock());
+        handleBannerRemove(event.getBlock(), "BlockBreakEvent");
     }
 
     @EventHandler
     public void onBlockExplode(BlockExplodeEvent event) {
         for (Block block : event.blockList()) {
-            handleBannerRemove(block);
+            handleBannerRemove(block, "BlockExplodeEvent");
         }
     }
 
     @EventHandler
     public void onEntityExplode(EntityExplodeEvent event) {
         for (Block block : event.blockList()) {
-            handleBannerRemove(block);
+            handleBannerRemove(block, "EntityExplodeEvent");
         }
     }
 
     @EventHandler
     public void onBlockBurn(BlockBurnEvent event) {
-        handleBannerRemove(event.getBlock());
+        handleBannerRemove(event.getBlock(), "BlockBurnEvent");
     }
 
     @EventHandler
     public void onBlockFromTo(BlockFromToEvent event) {
-        handleBannerRemove(event.getToBlock());
+        handleBannerRemove(event.getToBlock(), "BlockFromToEvent");
     }
 
     @EventHandler
     public void onBlockFade(BlockFadeEvent event) {
-        handleBannerRemove(event.getBlock());
-    }
-
-    @EventHandler
-    public void onBlockPhysics(BlockPhysicsEvent event) {
-        handleBannerRemove(event.getBlock());
+        handleBannerRemove(event.getBlock(), "BlockFadeEvent");
     }
 
     @EventHandler
     public void onBlockPistonExtend(BlockPistonExtendEvent event) {
         for (Block block : event.getBlocks()) {
-            handleBannerRemove(block);
+            handleBannerRemove(block, "BlockPistonExtendEvent");
         }
     }
 
     @EventHandler
     public void onBlockPistonRetract(BlockPistonRetractEvent event) {
         for (Block block : event.getBlocks()) {
-            handleBannerRemove(block);
+            handleBannerRemove(block, "BlockPistonRetractEvent");
         }
     }
 
