@@ -88,9 +88,21 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
         // No display logic here; global task will handle display restoration
         // Per-player display cleanup after join (delayed, Folia region task)
         BlueMapCompass.foliaLib.getScheduler().runAtEntityLater(player, t -> {
-            for (String markerId : fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player)) {
-                fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
+            UUID uuid = player.getUniqueId();
+            for (org.bukkit.World world : getServer().getWorlds()) {
+                for (org.bukkit.entity.BlockDisplay entity : world.getEntitiesByClass(org.bukkit.entity.BlockDisplay.class)) {
+                    String playerId = entity.getPersistentDataContainer().get(fun.mntale.blueMapCompass.WaypointManager.DISPLAY_PLAYER_KEY, org.bukkit.persistence.PersistentDataType.STRING);
+                    if (playerId != null && playerId.equals(uuid.toString())) {
+                        BlueMapCompass.foliaLib.getScheduler().runAtEntity(entity, td -> entity.remove());
+                    }
+                }
+                for (org.bukkit.entity.TextDisplay entity : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                    String playerId = entity.getPersistentDataContainer().get(fun.mntale.blueMapCompass.WaypointManager.DISPLAY_PLAYER_KEY, org.bukkit.persistence.PersistentDataType.STRING);
+                    if (playerId != null && playerId.equals(uuid.toString())) {
+                        BlueMapCompass.foliaLib.getScheduler().runAtEntity(entity, td -> entity.remove());
+                    }
+                }
             }
-        }, 10L);
+        }, 60L);
     }
 }
