@@ -153,8 +153,7 @@ public class MarkerGUI implements Listener {
         boolean isTracked = tracked.contains(marker.id());
         Component displayName;
         if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-            String[] parts = marker.id().split("-");
-            String colorName = parts.length > 0 ? parts[parts.length - 1].toLowerCase() : "";
+            String colorName = marker.color() != null ? marker.color().toLowerCase() : "white";
             String hex = BANNER_TO_HEX.getOrDefault(colorName, "#FFFFFF");
             String colorTag = colorName.length() > 0 ? "<color:" + hex + ">" : "";
             displayName = MM.deserialize(colorTag + "<b>" + marker.name() + "</b>");
@@ -189,10 +188,9 @@ public class MarkerGUI implements Listener {
 
     private static Material getMarkerIcon(String type, MarkerData marker) {
         if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-            String[] parts = marker.id().split("-");
-            String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
+            String colorName = marker.color() != null ? marker.color().toUpperCase() : "WHITE";
             try {
-                return Material.valueOf(colorName.toUpperCase() + "_BANNER");
+                return Material.valueOf(colorName + "_BANNER");
             } catch (IllegalArgumentException e) {
                 return Material.WHITE_BANNER;
             }

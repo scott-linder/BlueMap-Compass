@@ -19,6 +19,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.DyeColor;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 
@@ -55,6 +56,26 @@ public class WaypointManager {
         Map.entry("GREEN", NamedTextColor.DARK_GREEN),
         Map.entry("RED", NamedTextColor.RED),
         Map.entry("BLACK", NamedTextColor.BLACK)
+    );
+
+    // Add the BANNER_TO_HEX map (copy from MarkerGUI):
+    private static final Map<String, String> BANNER_TO_HEX = Map.ofEntries(
+        Map.entry("white", "#F9FFFE"),
+        Map.entry("orange", "#F9801D"),
+        Map.entry("magenta", "#C74EBD"),
+        Map.entry("light_blue", "#3AB3DA"),
+        Map.entry("yellow", "#FED83D"),
+        Map.entry("lime", "#80C71F"),
+        Map.entry("pink", "#F38BAA"),
+        Map.entry("gray", "#474F52"),
+        Map.entry("light_gray", "#9D9D97"),
+        Map.entry("cyan", "#169C9C"),
+        Map.entry("purple", "#8932B8"),
+        Map.entry("blue", "#3C44AA"),
+        Map.entry("brown", "#835432"),
+        Map.entry("green", "#5E7C16"),
+        Map.entry("red", "#B02E26"),
+        Map.entry("black", "#1D1D21")
     );
 
     public static Set<String> getTrackedMarkers(Player player) {
@@ -108,8 +129,7 @@ public class WaypointManager {
             // Set BlockDisplay material based on banner color
             Material blockMaterial = Material.GREEN_STAINED_GLASS;
             if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-                String[] parts = marker.id().split("-");
-                String colorName = parts.length > 0 ? parts[parts.length - 1].toUpperCase() : "";
+                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
                 try {
                     blockMaterial = Material.valueOf(colorName + "_STAINED_GLASS");
                 } catch (Exception ignored) {
@@ -175,8 +195,7 @@ public class WaypointManager {
                         BlueMapCompass.foliaLib.getScheduler().runAtLocation(target, (blockDisplayAndTextDisplay) -> {
                             Material spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
                             if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                                String[] parts = markerIdFinal.split("-");
-                                String colorName = parts.length > 0 ? parts[parts.length - 1].toUpperCase() : "";
+                                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
                                 try {
                                     spawnedBlockMaterial = Material.valueOf(colorName + "_STAINED_GLASS");
                                 } catch (Exception ignored) {
@@ -209,28 +228,21 @@ public class WaypointManager {
                             spawnedTextDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, markerIdFinal);
                             TextColor spawnedInitialColor = NamedTextColor.GREEN;
                             if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                                String[] parts = markerIdFinal.split("-");
-                                String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
-                                if (colorName.startsWith("#") && colorName.length() == 7) {
-                                    try {
-                                        spawnedInitialColor = TextColor.fromHexString(colorName);
-                                    } catch (Exception ignored) {}
-                                } else {
-                                    spawnedInitialColor = DYE_TO_NAMED.getOrDefault(colorName.toUpperCase(), NamedTextColor.GREEN);
-                                }
+                                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
+                                spawnedInitialColor = DYE_TO_NAMED.getOrDefault(colorName, NamedTextColor.GREEN);
                             }
                             double spawnedDist = player.getLocation().distance(target);
                             Component spawnedText = Component.text(markerName + " (" + Math.round(spawnedDist) + "m)", spawnedInitialColor);
                             spawnedTextDisplay.text(spawnedText);
                             BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedTextDisplay, td -> player.showEntity(plugin, spawnedTextDisplay));
                             textDisplays.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(markerIdFinal, spawnedTextDisplay);
-                            updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, spawnedDisplay, spawnedTextDisplay);
+                            updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, spawnedDisplay, spawnedTextDisplay, marker.color());
                         });
                         // End FoliaLib region context
                     }
                     // Add null check before updating displays
                     if (updateDisplay == null || updateTextDisplay == null) return;
-                    updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, updateDisplay, updateTextDisplay);
+                    updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, updateDisplay, updateTextDisplay, marker.color());
                 } else {
                     // Remove displays if they exist
                     if ((activeDisplay != null && !activeDisplay.isDead()) || (activeTextDisplay != null && !activeTextDisplay.isDead())) {
@@ -243,15 +255,8 @@ public class WaypointManager {
             // Set initial text color as well
             TextColor initialColor = NamedTextColor.GREEN;
             if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-                String[] parts = marker.id().split("-");
-                String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
-                if (colorName.startsWith("#") && colorName.length() == 7) {
-                    try {
-                        initialColor = TextColor.fromHexString(colorName);
-                    } catch (Exception ignored) {}
-                } else {
-                    initialColor = DYE_TO_NAMED.getOrDefault(colorName.toUpperCase(), NamedTextColor.GREEN);
-                }
+                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
+                initialColor = DYE_TO_NAMED.getOrDefault(colorName, NamedTextColor.GREEN);
             }
             double dist = player.getLocation().distance(target);
             Component text = Component.text(marker.name() + " (" + Math.round(dist) + "m)", initialColor);
@@ -362,7 +367,7 @@ public class WaypointManager {
         BlueMapCompass.foliaLib.getImpl().runTimer(() -> cleanupDisplays(plugin), 5 * 60 * 20L, 5 * 60 * 20L);
     }
 
-    private static void updateWaypointDisplays(Player player, Location target, String markerName, String markerGroupId, String markerIdFinal, BlockDisplay display, TextDisplay textDisplay) {
+    private static void updateWaypointDisplays(Player player, Location target, String markerName, String markerGroupId, String markerIdFinal, BlockDisplay display, TextDisplay textDisplay, String colorName) {
         if (display == null || display.isDead() || textDisplay == null || textDisplay.isDead()) {
             return;
         }
@@ -379,16 +384,11 @@ public class WaypointManager {
                 textDisplay.setTransformation(t);
                 // Update text and color
                 TextColor color = NamedTextColor.GREEN;
-                if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                    String[] parts = markerIdFinal.split("-");
-                    String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
-                    if (colorName.startsWith("#") && colorName.length() == 7) {
-                        try {
-                            color = TextColor.fromHexString(colorName);
-                        } catch (Exception ignored) {}
-                    } else {
-                        color = DYE_TO_NAMED.getOrDefault(colorName.toUpperCase(), NamedTextColor.GREEN);
-                    }
+                if (markerGroupId.equalsIgnoreCase("banner-markers") && colorName != null) {
+                    String hex = BANNER_TO_HEX.getOrDefault(colorName.toLowerCase(), "#00FF00");
+                    try {
+                        color = TextColor.fromHexString(hex);
+                    } catch (Exception ignored) {}
                 }
                 double distNow = player.getLocation().distance(target);
                 Component newText = Component.text(markerName + " (" + Math.round(distNow) + "m)", color);
@@ -405,16 +405,11 @@ public class WaypointManager {
                 textDisplay.setTransformation(t);
                 // Update text and color
                 TextColor color = NamedTextColor.GREEN;
-                if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                    String[] parts = markerIdFinal.split("-");
-                    String colorName = parts.length > 0 ? parts[parts.length - 1] : "";
-                    if (colorName.startsWith("#") && colorName.length() == 7) {
-                        try {
-                            color = TextColor.fromHexString(colorName);
-                        } catch (Exception ignored) {}
-                    } else {
-                        color = DYE_TO_NAMED.getOrDefault(colorName.toUpperCase(), NamedTextColor.GREEN);
-                    }
+                if (markerGroupId.equalsIgnoreCase("banner-markers") && colorName != null) {
+                    String hex = BANNER_TO_HEX.getOrDefault(colorName.toLowerCase(), "#00FF00");
+                    try {
+                        color = TextColor.fromHexString(hex);
+                    } catch (Exception ignored) {}
                 }
                 double distNow = player.getLocation().distance(target);
                 Component newText = Component.text(markerName + " (" + Math.round(distNow) + "m)", color);

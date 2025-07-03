@@ -44,6 +44,20 @@ public class BannerMarkerStorage {
         save();
     }
 
+    public void removeMarkerByLocation(String world, int x, int y, int z) {
+        List<String> list = config.getStringList("banner-markers");
+        list.removeIf(s -> {
+            String[] parts = s.split(",", 9);
+            return parts.length >= 4 &&
+                   parts[0].equals(world) &&
+                   Integer.parseInt(parts[1]) == x &&
+                   Integer.parseInt(parts[2]) == y &&
+                   Integer.parseInt(parts[3]) == z;
+        });
+        config.set("banner-markers", list);
+        save();
+    }
+
     public List<BannerMarkerData> getAllMarkers() {
         List<BannerMarkerData> result = new ArrayList<>();
         List<String> list = config.getStringList("banner-markers");

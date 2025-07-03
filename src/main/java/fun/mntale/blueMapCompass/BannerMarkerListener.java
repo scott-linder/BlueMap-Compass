@@ -59,9 +59,15 @@ public class BannerMarkerListener implements Listener {
             blueMapWorld.ifPresent(world -> {
                 world.getMaps().forEach(map -> {
                     MarkerSet markerSet = map.getMarkerSets().computeIfAbsent("banner-markers", k -> MarkerSet.builder().label("Banner Markers").build());
+                    String description = "<b>" + name + "</b><br>" +
+                                       "<b>Position:</b> " + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() +
+                                       "<br><b>Owner:</b> " + placerName;
+                    String iconUrl = "assets/bluemap/web/images/banners/" + color.name().toLowerCase() + ".png";
                     POIMarker marker = POIMarker.builder()
                             .label(name)
                             .position(pos)
+                            .detail(description)
+                            .icon(iconUrl, 0, 0)
                             .maxDistance(100000)
                             .build();
                     markerSet.getMarkers().put(markerId, marker);
@@ -84,6 +90,8 @@ public class BannerMarkerListener implements Listener {
             org.bukkit.Bukkit.getLogger().info("[BlueMapCompass][DEBUG] Banner marker removed by " + eventType + " at " + loc + " markerId=" + markerId);
         }
         // Remove from storage
+        BlueMapCompass.instance.bannerMarkerStorage.removeMarkerByLocation(worldName, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+        // Remove marker from BlueMap by markerId (for live update)
         BlueMapCompass.instance.bannerMarkerStorage.removeMarker(markerId);
         // Remove marker from BlueMap
         BlueMapAPI.getInstance().ifPresent(api -> {
@@ -167,9 +175,15 @@ public class BannerMarkerListener implements Listener {
                 blueMapWorld.ifPresent(world -> {
                     world.getMaps().forEach(map -> {
                         MarkerSet markerSet = map.getMarkerSets().computeIfAbsent("banner-markers", k -> MarkerSet.builder().label("Banner Markers").build());
+                        String description = "<b>" + data.name + "</b><br>" +
+                                           "<b>Position:</b> " + data.x + ", " + data.y + ", " + data.z +
+                                           "<br><b>Owner:</b> " + (data.placerName != null && !data.placerName.isEmpty() ? data.placerName : data.placerUuid);
+                        String iconUrl = "assets/bluemap/web/images/banners/" + data.color.toLowerCase() + ".png";
                         POIMarker marker = POIMarker.builder()
                                 .label(data.name)
                                 .position(pos)
+                                .detail(description)
+                                .icon(iconUrl, 32, 48)
                                 .maxDistance(100000)
                                 .build();
                         markerSet.getMarkers().put(data.markerId, marker);
