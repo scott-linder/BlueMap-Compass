@@ -38,11 +38,14 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(markerGUI, this);
         getServer().getPluginManager().registerEvents(bannerMarkerListener, this);
-        WaypointManager.registerCleanupTask(this);
+        // Start global waypoint update task
+        WaypointManager.startGlobalWaypointTask(this);
     }
 
     @Override
     public void onDisable() {
+        // Stop global waypoint update task
+        WaypointManager.stopGlobalWaypointTask();
     }
 
     @EventHandler
@@ -79,16 +82,6 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
             }
         }
         fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, newTracked);
-
-        // Restore tracked waypoints for valid markers
-        for (String markerId : newTracked) {
-            MarkerData marker = allMarkers.stream()
-                .filter(m -> m.id().equals(markerId))
-                .findFirst()
-                .orElse(null);
-            if (marker != null) {
-                fun.mntale.blueMapCompass.WaypointManager.setWaypoint(player, marker, this);
-            }
-        }
+        // No display logic here; global task will handle display restoration
     }
 }

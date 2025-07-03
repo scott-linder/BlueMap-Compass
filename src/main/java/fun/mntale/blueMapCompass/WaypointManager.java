@@ -29,10 +29,10 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.bukkit.scheduler.BukkitTask;
 
 public class WaypointManager {
     private static final Map<UUID, Map<String, BlockDisplay>> waypoints = new ConcurrentHashMap<>();
-    private static final Map<UUID, Map<String, WrappedTask>> tasks = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, TextDisplay>> textDisplays = new ConcurrentHashMap<>();
     public static final NamespacedKey TRACKED_MARKERS_KEY = new NamespacedKey("bluemapcompass", "tracked_markers");
     public static final NamespacedKey DISPLAY_PLAYER_KEY = new NamespacedKey("bluemapcompass", "display_player");
@@ -78,6 +78,125 @@ public class WaypointManager {
         Map.entry("black", "#1D1D21")
     );
 
+    // Global task for updating all waypoints
+    private static WrappedTask globalTask;
+
+    public static void startGlobalWaypointTask(JavaPlugin plugin) {
+        stopGlobalWaypointTask();
+        globalTask = BlueMapCompass.foliaLib.getImpl().runTimer(() -> updateAllWaypoints(plugin), 1L, 2L);
+    }
+
+    public static void stopGlobalWaypointTask() {
+        if (globalTask != null) {
+            globalTask.cancel();
+            globalTask = null;
+        }
+    }
+
+    private static void updateAllWaypoints(JavaPlugin plugin) {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Set<String> tracked = getTrackedMarkers(player);
+            for (String markerId : tracked) {
+                MarkerData marker = getMarkerDataById(markerId);
+                if (marker != null) {
+                    updateOrSpawnWaypoint(player, marker, plugin);
+                }
+            }
+        }
+    }
+
+    // Lookup MarkerData by id using BlueMapIntegration.getMarkers()
+    private static MarkerData getMarkerDataById(String markerId) {
+        return fun.mntale.blueMapCompass.BlueMapIntegration.getMarkers().stream()
+            .filter(m -> m.id().equals(markerId))
+            .findFirst().orElse(null);
+    }
+
+    private static void updateOrSpawnWaypoint(Player player, MarkerData marker, JavaPlugin plugin) {
+        // Recalculate world/target
+        String worldName = marker.world();
+        if (worldName.contains("#")) {
+            worldName = worldName.substring(0, worldName.indexOf('#'));
+        }
+        World world = Bukkit.getWorld(worldName);
+        if (world == null) {
+            removeWaypointDisplayOnly(player, marker.id());
+            return;
+        }
+        Location target = new Location(world, marker.x() + 0.5, marker.y(), marker.z() + 0.5);
+        boolean inSameWorld = player.getWorld().getName().equals(world.getName());
+        Map<String, BlockDisplay> playerDisplays = waypoints.get(player.getUniqueId());
+        Map<String, TextDisplay> playerTextDisplays = textDisplays.get(player.getUniqueId());
+        BlockDisplay activeDisplay = playerDisplays != null ? playerDisplays.get(marker.id()) : null;
+        TextDisplay activeTextDisplay = playerTextDisplays != null ? playerTextDisplays.get(marker.id()) : null;
+        if (inSameWorld) {
+            // If display is missing or dead, respawn it
+            if (activeDisplay == null || activeDisplay.isDead() || activeTextDisplay == null || activeTextDisplay.isDead()) {
+                removeWaypointDisplayOnly(player, marker.id());
+                // SAFETY: Check player and world before spawning
+                if (!player.isOnline() || player.getWorld() == null) {
+                    return;
+                }
+                // Spawn new BlockDisplay and TextDisplay using FoliaLib scheduler
+                BlueMapCompass.foliaLib.getScheduler().runAtLocation(target, (blockDisplayAndTextDisplay) -> {
+                    Material spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
+                    if (marker.groupId().equalsIgnoreCase("banner-markers")) {
+                        String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
+                        try {
+                            spawnedBlockMaterial = Material.valueOf(colorName + "_STAINED_GLASS");
+                        } catch (Exception ignored) {
+                            spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
+                        }
+                    }
+                    BlockDisplay spawnedDisplay = (BlockDisplay) player.getWorld().spawnEntity(getBillboardLocation(player, target, 48), EntityType.BLOCK_DISPLAY);
+                    spawnedDisplay.setBlock(Bukkit.createBlockData(spawnedBlockMaterial));
+                    spawnedDisplay.setBrightness(new Display.Brightness(15, 15));
+                    Transformation spawnedT = spawnedDisplay.getTransformation();
+                    spawnedT.getScale().set(0.15f, (float) (500 - (-64)), 0.15f);
+                    spawnedDisplay.setTransformation(spawnedT);
+                    spawnedDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
+                    spawnedDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
+                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedDisplay, showTask -> player.showEntity(plugin, spawnedDisplay));
+                    waypoints.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), spawnedDisplay);
+                    // Spawn new TextDisplay
+                    Location spawnedTextLoc = getBillboardLocation(player, target, 48);
+                    spawnedTextLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(marker.id()));
+                    TextDisplay spawnedTextDisplay = (TextDisplay) player.getWorld().spawnEntity(spawnedTextLoc, EntityType.TEXT_DISPLAY);
+                    spawnedTextDisplay.setBillboard(Display.Billboard.CENTER);
+                    spawnedTextDisplay.setSeeThrough(true);
+                    spawnedTextDisplay.setPersistent(false);
+                    spawnedTextDisplay.setViewRange(128);
+                    spawnedTextDisplay.setBrightness(new Display.Brightness(15, 15));
+                    double spawnedInitialDist = player.getLocation().distance(target);
+                    float spawnedInitialScale = (float)Math.min(8.0, Math.max(1.0, spawnedInitialDist/24.0));
+                    spawnedTextDisplay.setTransformation(new Transformation(spawnedTextDisplay.getTransformation().getTranslation(), new org.joml.Quaternionf(), new org.joml.Vector3f(spawnedInitialScale, spawnedInitialScale, spawnedInitialScale), new org.joml.Quaternionf()));
+                    spawnedTextDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
+                    spawnedTextDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
+                    TextColor spawnedInitialColor = NamedTextColor.GREEN;
+                    if (marker.groupId().equalsIgnoreCase("banner-markers")) {
+                        String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
+                        spawnedInitialColor = DYE_TO_NAMED.getOrDefault(colorName, NamedTextColor.GREEN);
+                    }
+                    double spawnedDist = player.getLocation().distance(target);
+                    Component spawnedText = Component.text(marker.name() + " (" + Math.round(spawnedDist) + "m)", spawnedInitialColor);
+                    spawnedTextDisplay.text(spawnedText);
+                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedTextDisplay, td -> player.showEntity(plugin, spawnedTextDisplay));
+                    textDisplays.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), spawnedTextDisplay);
+                    updateWaypointDisplays(player, target, marker.name(), marker.groupId(), marker.id(), spawnedDisplay, spawnedTextDisplay, marker.color());
+                });
+                return;
+            }
+            // Add null check before updating displays
+            if (activeDisplay == null || activeTextDisplay == null) return;
+            updateWaypointDisplays(player, target, marker.name(), marker.groupId(), marker.id(), activeDisplay, activeTextDisplay, marker.color());
+        } else {
+            // Remove displays if they exist, but do NOT cancel the timer; displays will respawn if player returns to the world
+            if ((activeDisplay != null && !activeDisplay.isDead()) || (activeTextDisplay != null && !activeTextDisplay.isDead())) {
+                removeWaypointDisplayOnly(player, marker.id());
+            }
+        }
+    }
+
     public static Set<String> getTrackedMarkers(Player player) {
         String data = player.getPersistentDataContainer().get(TRACKED_MARKERS_KEY, PersistentDataType.STRING);
         if (data == null || data.isEmpty()) return new HashSet<>();
@@ -93,177 +212,13 @@ public class WaypointManager {
     }
 
     public static void setWaypoint(Player player, MarkerData marker, JavaPlugin plugin) {
-        // Add markerId to tracked set
+        // Only add markerId to tracked set
         Set<String> tracked = getTrackedMarkers(player);
         if (!tracked.contains(marker.id())) {
             tracked.add(marker.id());
             setTrackedMarkers(player, tracked);
         }
-        // Always extract world name before '#'
-        String worldName = marker.world();
-        if (worldName.contains("#")) {
-            worldName = worldName.substring(0, worldName.indexOf('#'));
-        }
-        World world = Bukkit.getWorld(worldName);
-        if (world == null) {
-            if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
-                Bukkit.getLogger().warning("[BlueMapCompass] World not found for marker: " + marker.world() + " (Player: " + player.getName() + ")");
-            }
-            return;
-        }
-        World playerWorld = player.getWorld();
-        boolean sameWorld = playerWorld.getName().equals(world.getName());
-        Location target = new Location(world, marker.x() + 0.5, marker.y(), marker.z() + 0.5);
-        double minY = -64;
-        double maxY = 500;
-        double height = Math.max(1, Math.min(maxY - minY, maxY - minY)); // Clamp height to world range
-        Location displayLoc = getBillboardLocation(player, target, 48);
-        if (!sameWorld) {
-            if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
-                Bukkit.getLogger().warning("[BlueMapCompass] Player and marker are in different worlds. Waypoint tracked, but not displaying for: " + player.getName());
-            }
-            return;
-        }
-        BlueMapCompass.foliaLib.getScheduler().runAtLocation(displayLoc, regionTask -> {
-            BlockDisplay display = (BlockDisplay) player.getWorld().spawnEntity(displayLoc, EntityType.BLOCK_DISPLAY);
-            // Set BlockDisplay material based on banner color
-            Material blockMaterial = Material.GREEN_STAINED_GLASS;
-            if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
-                try {
-                    blockMaterial = Material.valueOf(colorName + "_STAINED_GLASS");
-                } catch (Exception ignored) {
-                    blockMaterial = Material.GREEN_STAINED_GLASS;
-                }
-            }
-            display.setBlock(Bukkit.createBlockData(blockMaterial));
-            display.setBrightness(new Display.Brightness(15, 15));
-            Transformation t = display.getTransformation();
-            t.getScale().set(0.15f, (float) height, 0.15f);
-            display.setTransformation(t);
-            display.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
-            display.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
-            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, showTask -> player.showEntity(plugin, display));
-            waypoints.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), display);
-            // Spawn TextDisplay
-            Location textLoc = getBillboardLocation(player, target, 48);
-            // Set Y to player's eye level + offset
-            textLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(marker.id()));
-            TextDisplay textDisplay = (TextDisplay) player.getWorld().spawnEntity(textLoc, EntityType.TEXT_DISPLAY);
-            textDisplay.setBillboard(Display.Billboard.CENTER);
-            textDisplay.setSeeThrough(true);
-            textDisplay.setPersistent(false);
-            textDisplay.setViewRange(128);
-            textDisplay.setBrightness(new Display.Brightness(15, 15));
-            double initialDist = player.getLocation().distance(target);
-            float initialScale = (float)Math.min(2.5, Math.max(1.0, initialDist/24.0));
-            textDisplay.setTransformation(new Transformation(textDisplay.getTransformation().getTranslation(), new org.joml.Quaternionf(), new org.joml.Vector3f(initialScale, initialScale, initialScale), new org.joml.Quaternionf()));
-            textDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
-            textDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
-            // Color for banner marker
-            final String markerName = marker.name();
-            final String markerGroupId = marker.groupId();
-            final String markerIdFinal = marker.id();
-            // Start repeating task to update position and text
-            WrappedTask task = BlueMapCompass.foliaLib.getScheduler().runTimer(() -> {
-                if (!player.isOnline()) {
-                    if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
-                        Bukkit.getLogger().warning("[BlueMapCompass] Player offline, removing displays for: " + player.getName());
-                    }
-                    removeWaypointDisplayOnly(player, markerIdFinal);
-                    return;
-                }
-                boolean inSameWorld = player.getWorld().getName().equals(target.getWorld().getName());
-                Map<String, BlockDisplay> playerDisplays = waypoints.get(player.getUniqueId());
-                Map<String, TextDisplay> playerTextDisplays = textDisplays.get(player.getUniqueId());
-                BlockDisplay activeDisplay = playerDisplays != null ? playerDisplays.get(markerIdFinal) : null;
-                TextDisplay activeTextDisplay = playerTextDisplays != null ? playerTextDisplays.get(markerIdFinal) : null;
-                if (inSameWorld) {
-                    BlockDisplay updateDisplay = activeDisplay;
-                    TextDisplay updateTextDisplay = activeTextDisplay;
-                    // Spawn displays if missing
-                    if (activeDisplay == null || activeDisplay.isDead() || activeTextDisplay == null || activeTextDisplay.isDead()) {
-                        removeWaypointDisplayOnly(player, markerIdFinal);
-                        // SAFETY: Check player and world before spawning
-                        if (!player.isOnline() || player.getWorld() == null) {
-                            if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
-                                Bukkit.getLogger().warning("[BlueMapCompass] Player offline or world null, skipping display spawn for: " + player.getName());
-                            }
-                            return;
-                        }
-                        // Spawn new BlockDisplay and TextDisplay using FoliaLib scheduler
-                        BlueMapCompass.foliaLib.getScheduler().runAtLocation(target, (blockDisplayAndTextDisplay) -> {
-                            Material spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
-                            if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
-                                try {
-                                    spawnedBlockMaterial = Material.valueOf(colorName + "_STAINED_GLASS");
-                                } catch (Exception ignored) {
-                                    spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
-                                }
-                            }
-                            BlockDisplay spawnedDisplay = (BlockDisplay) player.getWorld().spawnEntity(getBillboardLocation(player, target, 48), EntityType.BLOCK_DISPLAY);
-                            spawnedDisplay.setBlock(Bukkit.createBlockData(spawnedBlockMaterial));
-                            spawnedDisplay.setBrightness(new Display.Brightness(15, 15));
-                            Transformation spawnedT = spawnedDisplay.getTransformation();
-                            spawnedT.getScale().set(0.15f, (float) (500 - (-64)), 0.15f);
-                            spawnedDisplay.setTransformation(spawnedT);
-                            spawnedDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
-                            spawnedDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, markerIdFinal);
-                            BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedDisplay, showTask -> player.showEntity(plugin, spawnedDisplay));
-                            waypoints.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(markerIdFinal, spawnedDisplay);
-                            // Spawn new TextDisplay
-                            Location spawnedTextLoc = getBillboardLocation(player, target, 48);
-                            spawnedTextLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(markerIdFinal));
-                            TextDisplay spawnedTextDisplay = (TextDisplay) player.getWorld().spawnEntity(spawnedTextLoc, EntityType.TEXT_DISPLAY);
-                            spawnedTextDisplay.setBillboard(Display.Billboard.CENTER);
-                            spawnedTextDisplay.setSeeThrough(true);
-                            spawnedTextDisplay.setPersistent(false);
-                            spawnedTextDisplay.setViewRange(128);
-                            spawnedTextDisplay.setBrightness(new Display.Brightness(15, 15));
-                            double spawnedInitialDist = player.getLocation().distance(target);
-                            float spawnedInitialScale = (float)Math.min(8.0, Math.max(1.0, spawnedInitialDist/24.0));
-                            spawnedTextDisplay.setTransformation(new Transformation(spawnedTextDisplay.getTransformation().getTranslation(), new org.joml.Quaternionf(), new org.joml.Vector3f(spawnedInitialScale, spawnedInitialScale, spawnedInitialScale), new org.joml.Quaternionf()));
-                            spawnedTextDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
-                            spawnedTextDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, markerIdFinal);
-                            TextColor spawnedInitialColor = NamedTextColor.GREEN;
-                            if (markerGroupId.equalsIgnoreCase("banner-markers")) {
-                                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
-                                spawnedInitialColor = DYE_TO_NAMED.getOrDefault(colorName, NamedTextColor.GREEN);
-                            }
-                            double spawnedDist = player.getLocation().distance(target);
-                            Component spawnedText = Component.text(markerName + " (" + Math.round(spawnedDist) + "m)", spawnedInitialColor);
-                            spawnedTextDisplay.text(spawnedText);
-                            BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedTextDisplay, td -> player.showEntity(plugin, spawnedTextDisplay));
-                            textDisplays.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(markerIdFinal, spawnedTextDisplay);
-                            updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, spawnedDisplay, spawnedTextDisplay, marker.color());
-                        });
-                        // End FoliaLib region context
-                    }
-                    // Add null check before updating displays
-                    if (updateDisplay == null || updateTextDisplay == null) return;
-                    updateWaypointDisplays(player, target, markerName, markerGroupId, markerIdFinal, updateDisplay, updateTextDisplay, marker.color());
-                } else {
-                    // Remove displays if they exist
-                    if ((activeDisplay != null && !activeDisplay.isDead()) || (activeTextDisplay != null && !activeTextDisplay.isDead())) {
-                        removeWaypointDisplayOnly(player, markerIdFinal);
-                    }
-                    // Do not cancel the timer; displays will respawn if player returns to the world
-                }
-            }, 1, 2);
-            tasks.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), task);
-            // Set initial text color as well
-            TextColor initialColor = NamedTextColor.GREEN;
-            if (marker.groupId().equalsIgnoreCase("banner-markers")) {
-                String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
-                initialColor = DYE_TO_NAMED.getOrDefault(colorName, NamedTextColor.GREEN);
-            }
-            double dist = player.getLocation().distance(target);
-            Component text = Component.text(marker.name() + " (" + Math.round(dist) + "m)", initialColor);
-            textDisplay.text(text);
-            BlueMapCompass.foliaLib.getScheduler().runAtEntity(textDisplay, td -> player.showEntity(plugin, textDisplay));
-            textDisplays.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), textDisplay);
-        });
+        // No display logic here; global task will handle display spawning/updating
     }
 
     // Remove only display/task, not from tracked set
@@ -289,17 +244,6 @@ public class WaypointManager {
                 }
             }
             if (playerTextDisplays.isEmpty()) textDisplays.remove(player.getUniqueId());
-        }
-        Map<String, WrappedTask> playerTasks = tasks.get(player.getUniqueId());
-        if (playerTasks != null) {
-            WrappedTask task = playerTasks.remove(markerId);
-            if (task != null) {
-                task.cancel();
-                if (fun.mntale.blueMapCompass.BlueMapCompass.debug) {
-                    Bukkit.getLogger().warning("[BlueMapCompass] Update task cancelled for player: " + player.getName());
-                }
-            }
-            if (playerTasks.isEmpty()) tasks.remove(player.getUniqueId());
         }
     }
 
@@ -328,51 +272,16 @@ public class WaypointManager {
         return null;
     }
 
-    public static void cleanupDisplays(JavaPlugin plugin) {
-        for (World world : Bukkit.getWorlds()) {
-            for (Entity entity : world.getEntitiesByClass(BlockDisplay.class)) {
-                BlockDisplay display = (BlockDisplay) entity;
-                var pdc = display.getPersistentDataContainer();
-                String playerId = pdc.get(DISPLAY_PLAYER_KEY, PersistentDataType.STRING);
-                String markerId = pdc.get(DISPLAY_MARKER_KEY, PersistentDataType.STRING);
-                if (playerId == null || markerId == null) continue;
-                Player player = Bukkit.getPlayer(UUID.fromString(playerId));
-                if (player == null || !player.isOnline() || !getTrackedMarkers(player).contains(markerId)) {
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, removeTask -> display.remove());
-                    continue;
-                }
-                if (display.getLocation().distanceSquared(player.getLocation()) > 128*128) {
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, removeTask -> display.remove());
-                }
-            }
-            for (Entity entity : world.getEntitiesByClass(TextDisplay.class)) {
-                TextDisplay textDisplay = (TextDisplay) entity;
-                var pdc = textDisplay.getPersistentDataContainer();
-                String playerId = pdc.get(DISPLAY_PLAYER_KEY, PersistentDataType.STRING);
-                String markerId = pdc.get(DISPLAY_MARKER_KEY, PersistentDataType.STRING);
-                if (playerId == null || markerId == null) continue;
-                Player player = Bukkit.getPlayer(UUID.fromString(playerId));
-                if (player == null || !player.isOnline() || !getTrackedMarkers(player).contains(markerId)) {
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(textDisplay, removeTask -> textDisplay.remove());
-                    continue;
-                }
-                if (textDisplay.getLocation().distanceSquared(player.getLocation()) > 128*128) {
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(textDisplay, removeTask -> textDisplay.remove());
-                }
-            }
-        }
-    }
-
-    public static void registerCleanupTask(JavaPlugin plugin) {
-        BlueMapCompass.foliaLib.getImpl().runTimer(() -> cleanupDisplays(plugin), 5 * 60 * 20L, 5 * 60 * 20L);
-    }
-
     private static void updateWaypointDisplays(Player player, Location target, String markerName, String markerGroupId, String markerIdFinal, BlockDisplay display, TextDisplay textDisplay, String colorName) {
         if (display == null || display.isDead() || textDisplay == null || textDisplay.isDead()) {
             return;
         }
+        // --- FIX: Only update if player and target are in the same world ---
+        if (!player.getWorld().equals(target.getWorld())) {
+            return;
+        }
         double distance = player.getLocation().distance(target);
-        float scale = (float)Math.min(8.0, Math.max(1.0, distance/24.0));
+        float scale = (float)Math.min(6.0, Math.max(1.0, distance/24.0));
         if (distance > 48) {
             Location newLoc = getBillboardLocation(player, target, 48);
             newLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(markerIdFinal));
@@ -449,7 +358,7 @@ public class WaypointManager {
     }
 
     /**
-     * Atomically add a marker to the tracked set and spawn its display.
+     * Atomically add a marker to the tracked set.
      */
     public static void addTrackedWaypoint(Player player, MarkerData marker, JavaPlugin plugin) {
         Set<String> tracked = getTrackedMarkers(player);
@@ -457,6 +366,6 @@ public class WaypointManager {
             tracked.add(marker.id());
             setTrackedMarkers(player, tracked);
         }
-        setWaypoint(player, marker, plugin);
+        // No display logic here; global task will handle display spawning/updating
     }
 } 
