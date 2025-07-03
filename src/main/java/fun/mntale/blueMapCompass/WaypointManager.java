@@ -154,8 +154,10 @@ public class WaypointManager {
                     Transformation spawnedT = spawnedDisplay.getTransformation();
                     spawnedT.getScale().set(0.15f, (float) (500 - (-64)), 0.15f);
                     spawnedDisplay.setTransformation(spawnedT);
+                    spawnedDisplay.setPersistent(false);
                     spawnedDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
                     spawnedDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
+                    spawnedDisplay.setTeleportDuration(0);
                     BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedDisplay, showTask -> player.showEntity(plugin, spawnedDisplay));
                     waypoints.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), spawnedDisplay);
                     // Spawn new TextDisplay
@@ -165,6 +167,7 @@ public class WaypointManager {
                     spawnedTextDisplay.setBillboard(Display.Billboard.CENTER);
                     spawnedTextDisplay.setSeeThrough(true);
                     spawnedTextDisplay.setPersistent(false);
+                    spawnedTextDisplay.setTeleportDuration(0);
                     spawnedTextDisplay.setViewRange(128);
                     spawnedTextDisplay.setBrightness(new Display.Brightness(15, 15));
                     double spawnedInitialDist = player.getLocation().distance(target);
@@ -282,11 +285,19 @@ public class WaypointManager {
         }
         double distance = player.getLocation().distance(target);
         float scale = (float)Math.min(6.0, Math.max(1.0, distance/24.0));
+        // Set interpolation duration based on distance (longer for large moves)
+        int durationTicks = (distance > 48) ? 4 : 2;
         if (distance > 48) {
             Location newLoc = getBillboardLocation(player, target, 48);
             newLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(markerIdFinal));
-            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, tpTask -> display.teleportAsync(newLoc));
+            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, tpTask -> {
+                display.setTeleportDuration(durationTicks);
+                display.setInterpolationDuration(durationTicks);
+                display.teleportAsync(newLoc);
+            });
             BlueMapCompass.foliaLib.getScheduler().runAtEntity(textDisplay, td -> {
+                textDisplay.setTeleportDuration(durationTicks);
+                textDisplay.setInterpolationDuration(durationTicks);
                 textDisplay.teleportAsync(newLoc);
                 Transformation t = textDisplay.getTransformation();
                 t.getScale().set(scale, scale, scale);
@@ -304,10 +315,16 @@ public class WaypointManager {
                 textDisplay.text(newText);
             });
         } else {
-            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, tpTask -> display.teleportAsync(target));
+            BlueMapCompass.foliaLib.getScheduler().runAtEntity(display, tpTask -> {
+                display.setTeleportDuration(durationTicks);
+                display.setInterpolationDuration(durationTicks);
+                display.teleportAsync(target);
+            });
             Location textTarget = target.clone();
             textTarget.setY(player.getEyeLocation().getY() + getDeterministicYOffset(markerIdFinal));
             BlueMapCompass.foliaLib.getScheduler().runAtEntity(textDisplay, td -> {
+                textDisplay.setTeleportDuration(durationTicks);
+                textDisplay.setInterpolationDuration(durationTicks);
                 textDisplay.teleportAsync(textTarget);
                 Transformation t = textDisplay.getTransformation();
                 t.getScale().set(scale, scale, scale);
