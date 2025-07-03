@@ -11,11 +11,14 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.Location;
+import org.bukkit.World;
 
 import com.tcoded.folialib.FoliaLib;
 
 import java.util.Set;
 import java.util.List;
+import java.util.UUID;
 
 public final class BlueMapCompass extends JavaPlugin implements Listener {
 
@@ -69,9 +72,9 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         Set<String> tracked = fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player);
-        List<MarkerData> allMarkers = fun.mntale.blueMapCompass.BlueMapIntegration.getMarkers();
+        List<BannerMarkerStorage.BannerMarkerData> allBannerMarkers = fun.mntale.blueMapCompass.BlueMapCompass.instance.bannerMarkerStorage.getAllMarkers();
         Set<String> validMarkerIds = new java.util.HashSet<>();
-        for (MarkerData marker : allMarkers) validMarkerIds.add(marker.id());
+        for (BannerMarkerStorage.BannerMarkerData marker : allBannerMarkers) validMarkerIds.add(marker.markerId);
 
         Set<String> newTracked = new java.util.HashSet<>();
         for (String markerId : tracked) {
@@ -83,5 +86,11 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
         }
         fun.mntale.blueMapCompass.WaypointManager.setTrackedMarkers(player, newTracked);
         // No display logic here; global task will handle display restoration
+        // Per-player display cleanup after join (delayed, Folia region task)
+        BlueMapCompass.foliaLib.getScheduler().runAtEntityLater(player, t -> {
+            for (String markerId : fun.mntale.blueMapCompass.WaypointManager.getTrackedMarkers(player)) {
+                fun.mntale.blueMapCompass.WaypointManager.removeWaypointDisplayOnly(player, markerId);
+            }
+        }, 10L);
     }
 }
