@@ -137,8 +137,8 @@ public class WaypointManager {
                 if (!player.isOnline() || player.getWorld() == null) {
                     return;
                 }
-                // Spawn new BlockDisplay and TextDisplay using FoliaLib scheduler
-                BlueMapCompass.foliaLib.getScheduler().runAtLocation(target, (blockDisplayAndTextDisplay) -> {
+                // Spawn new BlockDisplay and TextDisplay using FoliaLib scheduler at player entity
+                BlueMapCompass.foliaLib.getScheduler().runAtEntity(player, (spawnTask) -> {
                     Material spawnedBlockMaterial = Material.GREEN_STAINED_GLASS;
                     if (marker.groupId().equalsIgnoreCase("banner-markers")) {
                         String colorName = marker.color() != null ? marker.color().toUpperCase() : "GREEN";
@@ -158,8 +158,9 @@ public class WaypointManager {
                     spawnedDisplay.getPersistentDataContainer().set(DISPLAY_PLAYER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
                     spawnedDisplay.getPersistentDataContainer().set(DISPLAY_MARKER_KEY, PersistentDataType.STRING, marker.id());
                     spawnedDisplay.setTeleportDuration(0);
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedDisplay, showTask -> player.showEntity(plugin, spawnedDisplay));
+                    player.showEntity(plugin, spawnedDisplay);
                     waypoints.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), spawnedDisplay);
+                    
                     // Spawn new TextDisplay
                     Location spawnedTextLoc = getBillboardLocation(player, target, 48);
                     spawnedTextLoc.setY(player.getEyeLocation().getY() + getDeterministicYOffset(marker.id()));
@@ -183,7 +184,7 @@ public class WaypointManager {
                     double spawnedDist = player.getLocation().distance(target);
                     Component spawnedText = Component.text(marker.name() + " (" + Math.round(spawnedDist) + "m)", spawnedInitialColor);
                     spawnedTextDisplay.text(spawnedText);
-                    BlueMapCompass.foliaLib.getScheduler().runAtEntity(spawnedTextDisplay, td -> player.showEntity(plugin, spawnedTextDisplay));
+                    player.showEntity(plugin, spawnedTextDisplay);
                     textDisplays.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put(marker.id(), spawnedTextDisplay);
                     updateWaypointDisplays(player, target, marker.name(), marker.groupId(), marker.id(), spawnedDisplay, spawnedTextDisplay, marker.color());
                 });
