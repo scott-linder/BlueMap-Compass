@@ -14,9 +14,9 @@ jobs:
         distribution: temurin
         cache: gradle
     - name: Build with Gradle
-      run: ./gradlew build --no-daemon
+      run: ./gradlew release --stacktrace
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BlueMapCompass
-        path: build/lib/*.jar
+        name: artifacts
+        path: build/release/*
