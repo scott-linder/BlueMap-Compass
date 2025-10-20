@@ -60,7 +60,7 @@ public final class BlueMapCompass extends JavaPlugin implements Listener {
             return;
         }
         
-        if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+        if (event.getAction() == Action.RIGHT_CLICK_AIR) {
             if (item != null && item.getType() == Material.COMPASS) {
                 event.setCancelled(true);
                 MarkerGUI.openFor(player);
