@@ -19,4 +19,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: BlueMapCompass
-        path: target/*.jar
+        path: build/lib/*.jar
